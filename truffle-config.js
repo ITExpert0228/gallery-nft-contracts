@@ -49,7 +49,7 @@ const mainnetNodeUrl = isInfura
   : "https://eth-mainnet.alchemyapi.io/v2/" + NODE_API_KEY;
 
 module.exports = {
-  contracts_build_directory: '../website/src/contracts',
+  //contracts_build_directory: '../website/src/contracts',
   /**
    * Networks define how you connect to your ethereum client and let you set the
    * defaults web3 uses to send transactions. If you don't specify one truffle
