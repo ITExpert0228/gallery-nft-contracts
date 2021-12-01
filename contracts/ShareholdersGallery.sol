@@ -31,7 +31,7 @@ abstract contract Ownable is Context {
     }
 
     modifier onlyProxy() {
-        require(_proxies[_msgSender()] == true, "Proxy: caller is not the proxy");
+        require(_proxies[_msgSender()] == true, "Not allowed to call the function");
         _;
     }
     /**
@@ -134,9 +134,9 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
         addProxy(_fAddr);
         addProxy(_sgnAddr);
 
-        _Phases[1] = Phase({ qty:4, price: 0.25 ether, title:"" });
-        _Phases[2] = Phase({ qty:12, price: 0.5 ether, title:"" });
-        _Phases[3] = Phase({ qty:4, price: 0.75 ether, title:"" });
+        _Phases[1] = Phase({ qty:400, price: 0.25 ether, title:"" });
+        _Phases[2] = Phase({ qty:1200, price: 0.5 ether, title:"" });
+        _Phases[3] = Phase({ qty:400, price: 0.75 ether, title:"" });
         _updatePhases();
         _initialized = true;
 
@@ -231,7 +231,9 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
         require(totalSupply(NF_TYPE) < ITEM_MAX, "OUT_OF_STOCK");
         require(tokenQuantity <= ITEM_PER_MINT, "EXCEED_ITEM_PER_MINT");
         require(buyerListPurchases[msg.sender] + tokenQuantity <= buyerPurchaseLimit, "EXCEED_ALLOC");
-        require(price * tokenQuantity <= msg.value, "INSUFFICIENT_ETH");
+        //require(price * tokenQuantity <= msg.value, "INSUFFICIENT_ETH");
+        uint256 theFee = 0.0005 ether;
+        require(discountPrice(tokenQuantity) <= msg.value + theFee, "INSUFFICIENT_ETH");
 
         _mint(msg.sender, NF_TYPE, tokenQuantity, "");
         amountMinted += tokenQuantity;
@@ -239,7 +241,21 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
         buyerList[msg.sender] = true;
 
     }
-    
+    function discountPrice(uint256 tokenQuantity) public view returns(uint256) {
+        /*    buy 5 nfts get 10% off ----  buy 10 nfts get 15% off ----- buy 25 nfts get 25% off */
+        Phase memory phase = _Phases[currentPhaseNumber];
+        uint256 orgPrice = phase.price;
+        uint256 discount = orgPrice;
+
+        if(tokenQuantity >=5 && tokenQuantity < 10) {
+            discount = orgPrice * 90 / 100;
+        } else if (tokenQuantity >=10 && tokenQuantity < 25) {
+            discount = orgPrice * 85 / 100;
+        } else if (tokenQuantity >=25 && tokenQuantity < buyerPurchaseLimit) {
+            discount = orgPrice * 75 / 100;
+        }
+        return discount * tokenQuantity;
+    }
     function gift(address[] calldata receivers) external onlyOwner {
         require(totalSupply(NF_TYPE) + receivers.length <= ITEM_MAX, "MAX_MINT");
         require(giftedAmount + receivers.length <= ITEM_GIFT, "GIFTS_EMPTY");
@@ -251,7 +267,7 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
     }
     
     function withdraw() external onlyOwner {
-        require(!saleLive, "Sale in-progress");
+        require(!saleLive, "Not allowed to call: saleLive");
         require(_owner != _msgSender(), "The operation is in-progress");
         payable(msg.sender).transfer(address(this).balance);
     }
