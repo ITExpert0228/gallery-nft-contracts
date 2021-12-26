@@ -104,6 +104,9 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
     using Strings for uint256;
     using ECDSA for bytes32;
 
+    string private _name;
+    string private _symbol;
+
     uint256 constant NF_TYPE = 1;
 
     uint8 public currentPhaseNumber = 1;
@@ -114,7 +117,6 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
     uint256 public  ITEM_GIFT = 0;
     uint256 public  ITEM_PER_MINT = 25;
     
-    mapping(address => bool) public buyerList;
     mapping(address => uint256) public buyerListPurchases;
     
     string private _contractURI;
@@ -149,6 +151,19 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
     address private mainPriceAddress = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
     address private testPriceAddress = 0x8A753747A1Fa494EC906cE90E9f37563A8AF630e;
     constructor() ERC1155("") {}
+    function name() public view  returns (string memory) {
+        return _name;
+    }
+    function symbol() public view  returns (string memory) {
+        return _symbol;
+    }
+    function totalSupply() public view returns (uint256) {
+        return amountMinted;
+    }
+    function balanceOf(address owner) public view returns (uint256) {
+        require(owner != address(0), "ERC1155: balance query for the zero address");
+        return buyerListPurchases[owner];
+    }
     function etherPrice(int _usd) public view returns (int) 
     {
         (
@@ -189,11 +204,13 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
         return _Phases[currentPhaseNumber];
     }
 
-    function initialize(address ownerAddr, address signerAddr, bool feedLive) external onlyOwner {
+    function initialize(string memory name_, string memory symbol_, address ownerAddr, address signerAddr, bool feedLive) external onlyOwner {
         require(ownerAddr  != address(0), "INVALID_FADDR");
         require(signerAddr  != address(0), "INVALID_SNGADDR");
         require(!_initialized , "Already initialized");
 
+        _name = name_;
+        _symbol = symbol_;
 
         _fAddr = ownerAddr;
         _sgnAddr = signerAddr;
@@ -254,11 +271,11 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
         return availableSupply;
     }
   //------------------
-    function addBuyerList(address[] calldata entries) external onlyOwner {
+    function addBuyerList(address[] calldata entries, uint[] calldata qty) external onlyOwner {
         for(uint256 i = 0; i < entries.length; i++) {
             address entry = entries[i];
             require(entry != address(0), "NULL_ADDRESS");
-            buyerList[entry] = true;
+            buyerListPurchases[entry] = qty[i];
         }   
     }
 
@@ -267,7 +284,7 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
             address entry = entries[i];
             require(entry != address(0), "NULL_ADDRESS");
             
-            buyerList[entry] = false;
+            buyerListPurchases[entry] = 0;
         }
     }
     function buyPhase(uint256 tokenQuantity) external nonReentrant payable {
@@ -300,7 +317,6 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
         if(currentPhaseBalance == tokenQuantity && currentPhaseNumber < TOTAL_PHASES) {
             currentPhaseNumber++;
         }
-        //require(buyerList[msg.sender], "NOT_QUALIFIED");
         require(totalSupply(NF_TYPE) < ITEM_MAX, "OUT_OF_STOCK");
         require(tokenQuantity <= ITEM_PER_MINT, "EXCEED_ITEM_PER_MINT");
         require(buyerListPurchases[msg.sender] + tokenQuantity <= buyerPurchaseLimit, "EXCEED_ALLOC");
@@ -311,8 +327,13 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
         _mint(msg.sender, NF_TYPE, tokenQuantity, "");
         amountMinted += tokenQuantity;
         buyerListPurchases[msg.sender]+=tokenQuantity;
-        buyerList[msg.sender] = true;
-
+    }
+    function mintByOwner(uint256 tokenQuantity) external onlyOwner {
+        require(tokenQuantity > 0, "ZERO_QUANTITY");
+        require(totalSupply(NF_TYPE) + tokenQuantity<= ITEM_MAX, "OUT_OF_STOCK");
+        _mint(msg.sender, NF_TYPE, tokenQuantity, "");
+        amountMinted += tokenQuantity;
+        buyerListPurchases[msg.sender]+=tokenQuantity;
     }
     function discountPrice(uint256 tokenQuantity) public view returns(uint256) {
         /*    buy 5 nfts get 10% off ----  buy 10 nfts get 15% off ----- buy 25 nfts get 25% off */
@@ -349,7 +370,7 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
     }
     
     function isBuyer(address addr) external view returns (bool) {
-        return buyerList[addr];
+        return buyerListPurchases[addr] > 0 ? true : false;
     }
     
     function buyerPurchasedCount(address addr) external view returns (uint256) {
