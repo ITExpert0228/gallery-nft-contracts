@@ -328,7 +328,7 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
             discount = orgPrice * 75 / 100;
         }
         int eth_discount = etherPrice(int(discount));
-        return uint256(eth_discount) * tokenQuantity;
+        return uint256(eth_discount) * tokenQuantity * 10 ** 8;
     }
     function gift(address[] calldata receivers) external onlyOwner {
         require(totalSupply(NF_TYPE) + receivers.length <= ITEM_MAX, "MAX_MINT");
