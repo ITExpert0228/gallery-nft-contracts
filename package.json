@@ -21,6 +21,7 @@
     "ethereum-waffle": "^3.4.0"
   },
   "dependencies": {
+    "@chainlink/contracts": "^0.3.0",
     "@openzeppelin/contracts-upgradeable": "^4.3.2",
     "eth-gas-reporter": "^0.2.22",
     "multi-token-standard": "^2.2.2",

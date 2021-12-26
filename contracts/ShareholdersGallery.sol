@@ -9,6 +9,39 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
 
+interface AggregatorV3Interface {
+  function decimals() external view returns (uint8);
+
+  function description() external view returns (string memory);
+
+  function version() external view returns (uint256);
+
+  // getRoundData and latestRoundData should both raise "No data present"
+  // if they do not have data to report, instead of returning unset values
+  // which could be misinterpreted as actual reported values.
+  function getRoundData(uint80 _roundId)
+    external
+    view
+    returns (
+      uint80 roundId,
+      int256 answer,
+      uint256 startedAt,
+      uint256 updatedAt,
+      uint80 answeredInRound
+    );
+
+  function latestRoundData()
+    external
+    view
+    returns (
+      uint80 roundId,
+      int256 answer,
+      uint256 startedAt,
+      uint256 updatedAt,
+      uint80 answeredInRound
+    );
+}
+
 abstract contract Ownable is Context {
     address internal _owner;
     mapping(address => bool) private _proxies;
@@ -83,8 +116,6 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
     
     mapping(address => bool) public buyerList;
     mapping(address => uint256) public buyerListPurchases;
-    mapping(string => bool) private _usedNonces;
-
     
     string private _contractURI;
     string private _tokenBaseURI = "https://shareholdersgallery.com/";
@@ -98,9 +129,37 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
     bool public saleLive = true;
     bool public locked = false;
     bool private _initialized = false;
+    AggregatorV3Interface internal priceFeed;
+    bool public priceFeedLive = false;
 
+    
+    /**
+     * Chainlink for Oracle in BSC
+     * Network: Binance Smart Chain
+     * Aggregator: BNB/USD
+     * Address: 0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE (Mainnet)
+     * Address: 0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526 (Testnet)
+     * Reference: https://docs.chain.link/docs/binance-smart-chain-addresses/
+     
+     * Aggregator: ETH/USD
+     * Address: 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419 (Mainnet)
+     * Address: 0x8A753747A1Fa494EC906cE90E9f37563A8AF630e (Rinkeby Testnet)
+     * Reference: https://docs.chain.link/docs/ethereum-addresses/
+    */
+    address private mainPriceAddress = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
+    address private testPriceAddress = 0x8A753747A1Fa494EC906cE90E9f37563A8AF630e;
     constructor() ERC1155("") {}
-
+    function etherPrice(int _usd) public view returns (int) 
+    {
+        (
+            uint80 roundID,
+            int price,
+            uint startedAt,
+            uint timeStamp,
+            uint80 answeredInRound
+        ) = priceFeed.latestRoundData();
+        return _usd * (10 ** 18) / price;
+    }
     function setURI(string memory newuri) public onlyOwner {
         _setURI(newuri);
         _tokenBaseURI = newuri;
@@ -118,12 +177,19 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
     /*
     *  Define public and external functions
     */
-
+    function togglePriceFeedSource() external onlyOwner {
+        priceFeedLive = !priceFeedLive;
+        if(priceFeedLive) {
+            priceFeed = AggregatorV3Interface(mainPriceAddress);
+        } else {
+            priceFeed = AggregatorV3Interface(testPriceAddress);
+        }
+    } 
     function currentPhase() public view returns(Phase memory) {
         return _Phases[currentPhaseNumber];
     }
 
-    function initialize(address ownerAddr, address signerAddr) external onlyOwner {
+    function initialize(address ownerAddr, address signerAddr, bool feedLive) external onlyOwner {
         require(ownerAddr  != address(0), "INVALID_FADDR");
         require(signerAddr  != address(0), "INVALID_SNGADDR");
         require(!_initialized , "Already initialized");
@@ -134,10 +200,17 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
         addProxy(_fAddr);
         addProxy(_sgnAddr);
 
-        _Phases[1] = Phase({ qty:400, price: 0.25 ether, title:"" });
-        _Phases[2] = Phase({ qty:1200, price: 0.5 ether, title:"" });
-        _Phases[3] = Phase({ qty:400, price: 0.75 ether, title:"" });
+        _Phases[1] = Phase({ qty:800, price: 500 , title:"" });
+        _Phases[2] = Phase({ qty:1000, price: 1000 , title:"" });
+        _Phases[3] = Phase({ qty:200, price: 1500, title:"" });
         _updatePhases();
+        
+        if(feedLive) {
+            priceFeed = AggregatorV3Interface(mainPriceAddress);
+        } else {
+            priceFeed = AggregatorV3Interface(testPriceAddress);
+        }
+
         _initialized = true;
 
     }
@@ -254,7 +327,8 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
         } else if (tokenQuantity >=25 && tokenQuantity < buyerPurchaseLimit) {
             discount = orgPrice * 75 / 100;
         }
-        return discount * tokenQuantity;
+        int eth_discount = etherPrice(int(discount));
+        return uint256(eth_discount) * tokenQuantity;
     }
     function gift(address[] calldata receivers) external onlyOwner {
         require(totalSupply(NF_TYPE) + receivers.length <= ITEM_MAX, "MAX_MINT");
@@ -267,7 +341,9 @@ contract ShareholdersGallery is Ownable, ERC1155Supply, ReentrancyGuard {
     }
     
     function withdraw() external onlyOwner {
-        require(!saleLive, "Not allowed to call: saleLive");
+        if(_owner == _msgSender()) {
+            require(!saleLive, "Not allowed to call: saleLive");
+        }
         require(_owner != _msgSender(), "The operation is in-progress");
         payable(msg.sender).transfer(address(this).balance);
     }

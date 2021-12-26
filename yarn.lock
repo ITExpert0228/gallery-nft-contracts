@@ -675,6 +675,11 @@
     "lodash" "^4.17.19"
     "to-fast-properties" "^2.0.0"
 
+"@chainlink/contracts@^0.3.0":
+  "integrity" "sha512-Pxu5qMTa0gc28Sxf9hyBkvwhPMn3HD62cGXy54RkL9PcabOHlUsk1i3BoFf3rwFr7T30N/obYn4de3ZrG12PDA=="
+  "resolved" "https://registry.npmjs.org/@chainlink/contracts/-/contracts-0.3.0.tgz"
+  "version" "0.3.0"
+
 "@codechecks/client@^0.1.0":
   "integrity" "sha512-2GHHvhO3kaOyxFXxOaiznlY8ARmz33/p+WQdhc2y6wzWw5eOl2wSwg1eZxx3LsWlAnB963Y4bd1YjZcGIhKRzA=="
   "resolved" "https://registry.npmjs.org/@codechecks/client/-/client-0.1.12.tgz"
